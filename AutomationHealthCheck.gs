@@ -21,6 +21,11 @@
 const CONFIG = {
   alertEmail: 'shawna@mydashmedia.com',
 
+  // ---- Remote Control spreadsheet ----
+  // This spreadsheet acts as the control panel for the health check system.
+  // Create a spreadsheet and paste its ID here, then run setupRemoteControl() once.
+  remoteControlSpreadsheetId: '',  // Set after creating the control spreadsheet
+
   // ---- ALL spreadsheets referenced across all 16 repos ----
   spreadsheets: {
     masterZiflow: {
@@ -1457,4 +1462,610 @@ function columnIndexToLetter_(index) {
     idx = Math.floor(idx / 26) - 1;
   }
   return letter;
+}
+
+
+// ==================== REMOTE CONTROL ====================
+
+/**
+ * Remote Control System
+ *
+ * Provides two ways to remotely manage the health check:
+ *
+ * 1. CONTROL SPREADSHEET — A dedicated spreadsheet with:
+ *    - "Control Panel" sheet: toggle checks on/off, trigger runs, view status
+ *    - "Run Log" sheet: history of all health check runs
+ *    - "Overrides" sheet: temporarily adjust thresholds without editing code
+ *
+ * 2. WEB APP ENDPOINT — Deploy as web app for URL-based triggering:
+ *    - GET ?action=run         → Run full health check now
+ *    - GET ?action=run&check=X → Run a single check category
+ *    - GET ?action=status      → Get last run status as JSON
+ *    - GET ?action=pause       → Pause scheduled runs
+ *    - GET ?action=resume      → Resume scheduled runs
+ *    - GET ?action=log         → Get recent run history as JSON
+ *
+ * Setup: Run setupRemoteControl() once to create the control spreadsheet.
+ * Deploy: Publish > Deploy as web app (execute as me, anyone with link).
+ */
+
+// ---- Control Spreadsheet Setup ----
+
+/**
+ * Run once to create the remote control spreadsheet and populate it.
+ * After running, copy the logged spreadsheet ID into CONFIG.remoteControlSpreadsheetId.
+ */
+function setupRemoteControl() {
+  const ss = SpreadsheetApp.create('Automation Health Check — Remote Control');
+  const ssId = ss.getId();
+
+  // --- Control Panel sheet ---
+  const controlSheet = ss.getSheets()[0];
+  controlSheet.setName('Control Panel');
+
+  // Header
+  controlSheet.getRange('A1').setValue('Automation Health Check — Remote Control').setFontSize(16).setFontWeight('bold');
+  controlSheet.getRange('A2').setValue('Toggle checks, trigger runs, and view status from here.').setFontColor('#666');
+  controlSheet.getRange('A3').setValue('Last refreshed:').setFontWeight('bold');
+  controlSheet.getRange('B3').setValue(new Date()).setNumberFormat('yyyy-MM-dd h:mm:ss a');
+
+  // System status
+  controlSheet.getRange('A5:D5').setValues([['Setting', 'Value', 'Description', 'Updated']]);
+  controlSheet.getRange('A5:D5').setFontWeight('bold').setBackground('#e8eaf6');
+
+  const settings = [
+    ['Paused', 'FALSE', 'Set to TRUE to pause scheduled health checks', ''],
+    ['Email Alerts', 'TRUE', 'Set to FALSE to suppress email alerts', ''],
+    ['Weekend Override', 'FALSE', 'Set to TRUE to run on weekends too', ''],
+    ['Last Run Status', '', 'Populated automatically after each run', ''],
+    ['Last Run Time', '', 'Populated automatically after each run', ''],
+    ['Critical Count', '', 'From last run', ''],
+    ['Warning Count', '', 'From last run', ''],
+    ['Healthy Count', '', 'From last run', '']
+  ];
+  controlSheet.getRange(6, 1, settings.length, 4).setValues(settings);
+
+  // Check toggles
+  controlSheet.getRange('A16').setValue('Check Toggles').setFontSize(14).setFontWeight('bold');
+  controlSheet.getRange('A17:C17').setValues([['Check Category', 'Enabled', 'Notes']]);
+  controlSheet.getRange('A17:C17').setFontWeight('bold').setBackground('#e8eaf6');
+
+  const checkToggles = [
+    ['Spreadsheet Freshness', 'TRUE', 'All 10 spreadsheets'],
+    ['Column Layout', 'TRUE', 'Every hardcoded position risk'],
+    ['CSV Pipeline', 'TRUE', 'Sprout, Ziflow, SMM Reports'],
+    ['Mac Watcher Health', 'TRUE', 'Inferred from Drive file freshness'],
+    ['SheetGo Sync', 'TRUE', 'Row counts as health signal'],
+    ['Formula Health', 'TRUE', 'Value validation + error scanning'],
+    ['Cross-Spreadsheet Data Flow', 'TRUE', 'Data flow freshness'],
+    ['Filming Schedule System', 'TRUE', 'Library accessibility']
+  ];
+  controlSheet.getRange(18, 1, checkToggles.length, 3).setValues(checkToggles);
+
+  // Add data validation (TRUE/FALSE dropdowns) for toggle cells
+  const boolRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['TRUE', 'FALSE'], true)
+    .build();
+
+  // Settings toggles (B6:B8)
+  controlSheet.getRange('B6:B8').setDataValidation(boolRule);
+  // Check toggles (B18:B25)
+  controlSheet.getRange(18, 2, checkToggles.length, 1).setDataValidation(boolRule);
+
+  // Quick actions section
+  controlSheet.getRange('A28').setValue('Quick Actions').setFontSize(14).setFontWeight('bold');
+  controlSheet.getRange('A29').setValue('To trigger a run: go to Extensions > Apps Script and run remoteRunHealthCheck()');
+  controlSheet.getRange('A30').setValue('Or use the web app URL (see Deploy instructions in the script).');
+
+  // Format column widths
+  controlSheet.setColumnWidth(1, 220);
+  controlSheet.setColumnWidth(2, 120);
+  controlSheet.setColumnWidth(3, 400);
+  controlSheet.setColumnWidth(4, 180);
+
+  // --- Run Log sheet ---
+  const logSheet = ss.insertSheet('Run Log');
+  logSheet.getRange('A1:F1').setValues([['Timestamp', 'Status', 'Critical', 'Warnings', 'Healthy', 'Trigger Source']]);
+  logSheet.getRange('A1:F1').setFontWeight('bold').setBackground('#e8eaf6');
+  logSheet.setColumnWidth(1, 200);
+  logSheet.setColumnWidth(6, 150);
+
+  // --- Overrides sheet ---
+  const overrideSheet = ss.insertSheet('Overrides');
+  overrideSheet.getRange('A1').setValue('Threshold Overrides').setFontSize(14).setFontWeight('bold');
+  overrideSheet.getRange('A2').setValue('Override stale thresholds without editing code. Leave Value blank to use the default.').setFontColor('#666');
+  overrideSheet.getRange('A4:D4').setValues([['Spreadsheet Key', 'Default maxStaleHours', 'Override Value', 'Notes']]);
+  overrideSheet.getRange('A4:D4').setFontWeight('bold').setBackground('#e8eaf6');
+
+  let row = 5;
+  for (const [key, config] of Object.entries(CONFIG.spreadsheets)) {
+    overrideSheet.getRange(row, 1, 1, 4).setValues([
+      [key, config.maxStaleHours, '', config.name]
+    ]);
+    row++;
+  }
+
+  overrideSheet.setColumnWidth(1, 220);
+  overrideSheet.setColumnWidth(2, 160);
+  overrideSheet.setColumnWidth(3, 130);
+  overrideSheet.setColumnWidth(4, 350);
+
+  // Log the ID for the user to paste into CONFIG
+  Logger.log('Remote Control spreadsheet created!');
+  Logger.log('Spreadsheet ID: ' + ssId);
+  Logger.log('URL: ' + ss.getUrl());
+  Logger.log('');
+  Logger.log('NEXT STEP: Paste this ID into CONFIG.remoteControlSpreadsheetId:');
+  Logger.log("  remoteControlSpreadsheetId: '" + ssId + "'");
+}
+
+// ---- Remote Control Helpers ----
+
+/**
+ * Read the control panel settings from the remote control spreadsheet.
+ * Returns null if the spreadsheet is not configured.
+ */
+function getRemoteControlSettings_() {
+  if (!CONFIG.remoteControlSpreadsheetId) return null;
+
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.remoteControlSpreadsheetId);
+    const sheet = ss.getSheetByName('Control Panel');
+    if (!sheet) return null;
+
+    // Read settings (rows 6-13, columns A-B)
+    const settingValues = sheet.getRange('A6:B13').getValues();
+    const settings = {};
+    for (const [key, val] of settingValues) {
+      settings[String(key).trim()] = String(val).trim();
+    }
+
+    // Read check toggles (rows 18-25, columns A-B)
+    const toggleValues = sheet.getRange('A18:B25').getValues();
+    const toggles = {};
+    for (const [category, enabled] of toggleValues) {
+      if (category) {
+        toggles[String(category).trim()] = String(enabled).trim().toUpperCase() === 'TRUE';
+      }
+    }
+
+    // Read threshold overrides
+    const overrideSheet = ss.getSheetByName('Overrides');
+    const overrides = {};
+    if (overrideSheet) {
+      const overrideData = overrideSheet.getDataRange().getValues();
+      for (let i = 4; i < overrideData.length; i++) {  // Skip header rows
+        const key = String(overrideData[i][0]).trim();
+        const overrideVal = overrideData[i][2];
+        if (key && overrideVal !== '' && overrideVal !== null && !isNaN(overrideVal)) {
+          overrides[key] = Number(overrideVal);
+        }
+      }
+    }
+
+    return {
+      paused: settings['Paused'] === 'TRUE',
+      emailAlerts: settings['Email Alerts'] !== 'FALSE',
+      weekendOverride: settings['Weekend Override'] === 'TRUE',
+      toggles: toggles,
+      overrides: overrides,
+      spreadsheet: ss
+    };
+  } catch (e) {
+    Logger.log('Remote control spreadsheet error: ' + e.message);
+    return null;
+  }
+}
+
+/**
+ * Update the control panel with results from a health check run.
+ */
+function updateRemoteControlStatus_(results, triggerSource) {
+  if (!CONFIG.remoteControlSpreadsheetId) return;
+
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.remoteControlSpreadsheetId);
+    const controlSheet = ss.getSheetByName('Control Panel');
+
+    if (controlSheet) {
+      const criticalCount = results.checks.filter(c => c.status === 'critical').length;
+      const warningCount = results.checks.filter(c => c.status === 'warning').length;
+      const healthyCount = results.checks.filter(c => c.status === 'healthy').length;
+
+      // Update status fields (rows 9-13)
+      controlSheet.getRange('B3').setValue(new Date());
+      controlSheet.getRange('B9').setValue(results.overallStatus.toUpperCase());
+      controlSheet.getRange('B10').setValue(new Date());
+      controlSheet.getRange('B11').setValue(criticalCount);
+      controlSheet.getRange('B12').setValue(warningCount);
+      controlSheet.getRange('B13').setValue(healthyCount);
+
+      // Color-code the status cell
+      const statusColors = { healthy: '#c8e6c9', warning: '#fff9c4', critical: '#ffcdd2' };
+      controlSheet.getRange('B9').setBackground(statusColors[results.overallStatus] || '#ffffff');
+
+      // Update the "Updated" column for status rows
+      const now = new Date();
+      controlSheet.getRange('D9:D13').setValues([[now], [now], [now], [now], [now]]);
+    }
+
+    // Append to Run Log
+    const logSheet = ss.getSheetByName('Run Log');
+    if (logSheet) {
+      const criticalCount = results.checks.filter(c => c.status === 'critical').length;
+      const warningCount = results.checks.filter(c => c.status === 'warning').length;
+      const healthyCount = results.checks.filter(c => c.status === 'healthy').length;
+
+      logSheet.insertRowAfter(1);
+      logSheet.getRange(2, 1, 1, 6).setValues([[
+        new Date(),
+        results.overallStatus.toUpperCase(),
+        criticalCount,
+        warningCount,
+        healthyCount,
+        triggerSource || 'scheduled'
+      ]]);
+
+      // Color-code the status
+      const statusColors = { healthy: '#c8e6c9', warning: '#fff9c4', critical: '#ffcdd2' };
+      logSheet.getRange(2, 2).setBackground(statusColors[results.overallStatus] || '#ffffff');
+
+      // Keep only last 100 log entries
+      const lastRow = logSheet.getLastRow();
+      if (lastRow > 101) {
+        logSheet.deleteRows(102, lastRow - 101);
+      }
+    }
+  } catch (e) {
+    Logger.log('Failed to update remote control: ' + e.message);
+  }
+}
+
+/**
+ * Check if a specific check category is enabled via remote control.
+ * Returns true if remote control is not configured (all checks run by default).
+ */
+function isCheckEnabled_(categoryName) {
+  const settings = getRemoteControlSettings_();
+  if (!settings) return true;  // No remote control = all checks enabled
+  if (settings.toggles[categoryName] === undefined) return true;  // Unknown category = enabled
+  return settings.toggles[categoryName];
+}
+
+/**
+ * Apply threshold overrides from the remote control spreadsheet.
+ * Call this before running checks to pick up any override values.
+ */
+function applyThresholdOverrides_() {
+  const settings = getRemoteControlSettings_();
+  if (!settings || Object.keys(settings.overrides).length === 0) return;
+
+  for (const [key, overrideHours] of Object.entries(settings.overrides)) {
+    if (CONFIG.spreadsheets[key]) {
+      Logger.log('Override: ' + key + ' maxStaleHours ' +
+        CONFIG.spreadsheets[key].maxStaleHours + ' → ' + overrideHours);
+      CONFIG.spreadsheets[key].maxStaleHours = overrideHours;
+    }
+  }
+}
+
+
+// ---- Remote-Triggered Run Functions ----
+
+/**
+ * Run health check with remote control integration.
+ * Respects pause state, check toggles, and threshold overrides.
+ * Can be called from the control spreadsheet, web app, or trigger.
+ */
+function remoteRunHealthCheck(triggerSource) {
+  const source = triggerSource || 'manual';
+  const settings = getRemoteControlSettings_();
+
+  // Check if paused (unless this is a forced manual run)
+  if (settings && settings.paused && source !== 'forced') {
+    Logger.log('Health check is PAUSED via remote control. Use source="forced" to override.');
+    return { status: 'paused', message: 'Health check is paused via remote control' };
+  }
+
+  // Weekend check (with override support)
+  const day = new Date().getDay();
+  const weekendOverride = settings ? settings.weekendOverride : false;
+  if ((day === 0 || day === 6) && !weekendOverride) {
+    Logger.log('Weekend — skipping health check. Set Weekend Override to TRUE to run anyway.');
+    return { status: 'skipped', message: 'Weekend — skipped' };
+  }
+
+  // Apply threshold overrides
+  applyThresholdOverrides_();
+
+  const results = {
+    timestamp: new Date(),
+    checks: [],
+    overallStatus: 'healthy'
+  };
+
+  // Run checks respecting toggles
+  if (isCheckEnabled_('Spreadsheet Freshness')) checkSpreadsheetFreshness_(results);
+  if (isCheckEnabled_('Column Layout')) checkColumnLayouts_(results);
+  if (isCheckEnabled_('CSV Pipeline')) checkCSVPipelines_(results);
+  if (isCheckEnabled_('Mac Watcher Health')) checkMacWatcherHealth_(results);
+  if (isCheckEnabled_('SheetGo Sync')) checkSheetGoSyncs_(results);
+  if (isCheckEnabled_('Formula Health')) checkFormulaHealth_(results);
+  if (isCheckEnabled_('Cross-Spreadsheet Data Flow')) checkCrossSpreadsheetFlows_(results);
+  if (isCheckEnabled_('Filming Schedule System')) checkFilmingScheduleLibrary_(results);
+
+  // Determine overall status
+  const criticalCount = results.checks.filter(c => c.status === 'critical').length;
+  const warningCount = results.checks.filter(c => c.status === 'warning').length;
+
+  if (criticalCount > 0) {
+    results.overallStatus = 'critical';
+  } else if (warningCount > 0) {
+    results.overallStatus = 'warning';
+  }
+
+  // Send email (unless disabled via remote control)
+  const emailEnabled = settings ? settings.emailAlerts : true;
+  if (emailEnabled) {
+    sendHealthCheckEmail_(results);
+  } else {
+    Logger.log('Email alerts disabled via remote control — skipping email.');
+  }
+
+  // Update the remote control spreadsheet with results
+  updateRemoteControlStatus_(results, source);
+
+  Logger.log('Remote health check complete (' + source + '): ' + results.overallStatus +
+    ' (' + criticalCount + ' critical, ' + warningCount + ' warnings, ' +
+    results.checks.filter(c => c.status === 'healthy').length + ' healthy)');
+
+  return {
+    status: results.overallStatus,
+    critical: criticalCount,
+    warnings: warningCount,
+    healthy: results.checks.filter(c => c.status === 'healthy').length,
+    timestamp: results.timestamp.toISOString()
+  };
+}
+
+/**
+ * Run a single check category by name. Useful for targeted debugging.
+ */
+function remoteRunSingleCheck(categoryName) {
+  applyThresholdOverrides_();
+
+  const results = {
+    timestamp: new Date(),
+    checks: [],
+    overallStatus: 'healthy'
+  };
+
+  const checkMap = {
+    'Spreadsheet Freshness': checkSpreadsheetFreshness_,
+    'Column Layout': checkColumnLayouts_,
+    'CSV Pipeline': checkCSVPipelines_,
+    'Mac Watcher Health': checkMacWatcherHealth_,
+    'SheetGo Sync': checkSheetGoSyncs_,
+    'Formula Health': checkFormulaHealth_,
+    'Cross-Spreadsheet Data Flow': checkCrossSpreadsheetFlows_,
+    'Filming Schedule System': checkFilmingScheduleLibrary_
+  };
+
+  const checkFn = checkMap[categoryName];
+  if (!checkFn) {
+    return { error: 'Unknown check category: ' + categoryName, available: Object.keys(checkMap) };
+  }
+
+  checkFn(results);
+
+  const criticalCount = results.checks.filter(c => c.status === 'critical').length;
+  const warningCount = results.checks.filter(c => c.status === 'warning').length;
+
+  if (criticalCount > 0) results.overallStatus = 'critical';
+  else if (warningCount > 0) results.overallStatus = 'warning';
+
+  updateRemoteControlStatus_(results, 'single:' + categoryName);
+
+  return {
+    category: categoryName,
+    status: results.overallStatus,
+    checks: results.checks,
+    timestamp: results.timestamp.toISOString()
+  };
+}
+
+
+// ---- Web App Endpoint ----
+
+/**
+ * Web app GET handler for remote control.
+ *
+ * Deploy: Publish > Deploy as web app
+ *   - Execute as: Me
+ *   - Who has access: Anyone (or Anyone within org)
+ *
+ * Usage:
+ *   GET ?action=run                     → Run full health check
+ *   GET ?action=run&check=Column+Layout → Run single check category
+ *   GET ?action=run&force=true          → Run even if paused
+ *   GET ?action=status                  → Get last run status
+ *   GET ?action=pause                   → Pause scheduled runs
+ *   GET ?action=resume                  → Resume scheduled runs
+ *   GET ?action=log&limit=10            → Get recent run history
+ *   GET ?action=checks                  → List available check categories
+ */
+function doGet(e) {
+  const action = e.parameter.action || 'status';
+  let result;
+
+  try {
+    switch (action) {
+      case 'run': {
+        const checkName = e.parameter.check;
+        const force = e.parameter.force === 'true';
+        const source = force ? 'forced' : 'web-app';
+
+        if (checkName) {
+          result = remoteRunSingleCheck(checkName);
+        } else {
+          result = remoteRunHealthCheck(source);
+        }
+        break;
+      }
+
+      case 'status': {
+        result = getLastRunStatus_();
+        break;
+      }
+
+      case 'pause': {
+        result = setRemoteControlPause_(true);
+        break;
+      }
+
+      case 'resume': {
+        result = setRemoteControlPause_(false);
+        break;
+      }
+
+      case 'log': {
+        const limit = parseInt(e.parameter.limit) || 10;
+        result = getRunLog_(limit);
+        break;
+      }
+
+      case 'checks': {
+        result = {
+          available: [
+            'Spreadsheet Freshness', 'Column Layout', 'CSV Pipeline',
+            'Mac Watcher Health', 'SheetGo Sync', 'Formula Health',
+            'Cross-Spreadsheet Data Flow', 'Filming Schedule System'
+          ]
+        };
+        break;
+      }
+
+      default:
+        result = { error: 'Unknown action: ' + action, available: ['run', 'status', 'pause', 'resume', 'log', 'checks'] };
+    }
+  } catch (err) {
+    result = { error: err.message };
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify(result, null, 2))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Get the status from the last health check run.
+ */
+function getLastRunStatus_() {
+  if (!CONFIG.remoteControlSpreadsheetId) {
+    return { error: 'Remote control spreadsheet not configured. Run setupRemoteControl() first.' };
+  }
+
+  const ss = SpreadsheetApp.openById(CONFIG.remoteControlSpreadsheetId);
+  const sheet = ss.getSheetByName('Control Panel');
+  if (!sheet) return { error: 'Control Panel sheet not found' };
+
+  const settingValues = sheet.getRange('A6:B13').getValues();
+  const settings = {};
+  for (const [key, val] of settingValues) {
+    settings[String(key).trim()] = val;
+  }
+
+  return {
+    paused: String(settings['Paused']).trim() === 'TRUE',
+    lastStatus: settings['Last Run Status'] || 'never run',
+    lastRunTime: settings['Last Run Time'] ? new Date(settings['Last Run Time']).toISOString() : null,
+    critical: settings['Critical Count'] || 0,
+    warnings: settings['Warning Count'] || 0,
+    healthy: settings['Healthy Count'] || 0
+  };
+}
+
+/**
+ * Get recent entries from the Run Log.
+ */
+function getRunLog_(limit) {
+  if (!CONFIG.remoteControlSpreadsheetId) {
+    return { error: 'Remote control spreadsheet not configured' };
+  }
+
+  const ss = SpreadsheetApp.openById(CONFIG.remoteControlSpreadsheetId);
+  const sheet = ss.getSheetByName('Run Log');
+  if (!sheet) return { error: 'Run Log sheet not found' };
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { entries: [] };
+
+  const numRows = Math.min(limit, lastRow - 1);
+  const data = sheet.getRange(2, 1, numRows, 6).getValues();
+
+  return {
+    entries: data.map(row => ({
+      timestamp: row[0] ? new Date(row[0]).toISOString() : null,
+      status: row[1],
+      critical: row[2],
+      warnings: row[3],
+      healthy: row[4],
+      source: row[5]
+    }))
+  };
+}
+
+/**
+ * Set the paused state on the remote control spreadsheet.
+ */
+function setRemoteControlPause_(paused) {
+  if (!CONFIG.remoteControlSpreadsheetId) {
+    return { error: 'Remote control spreadsheet not configured. Run setupRemoteControl() first.' };
+  }
+
+  const ss = SpreadsheetApp.openById(CONFIG.remoteControlSpreadsheetId);
+  const sheet = ss.getSheetByName('Control Panel');
+  if (!sheet) return { error: 'Control Panel sheet not found' };
+
+  sheet.getRange('B6').setValue(paused ? 'TRUE' : 'FALSE');
+  sheet.getRange('D6').setValue(new Date());
+
+  return { paused: paused, message: paused ? 'Health checks paused' : 'Health checks resumed' };
+}
+
+
+// ---- Updated Trigger Entry Point ----
+
+/**
+ * Updated trigger entry point that integrates remote control.
+ * Replace the existing trigger handler with this to get remote control support.
+ * Run setupRemoteControlTrigger() to switch to this handler.
+ */
+function runHealthCheckWithRemoteControl() {
+  remoteRunHealthCheck('scheduled');
+}
+
+/**
+ * Set up the trigger to use the remote-control-aware entry point.
+ * Replaces the old runHealthCheck trigger.
+ */
+function setupRemoteControlTrigger() {
+  // Remove existing health check triggers
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(function(trigger) {
+    const fn = trigger.getHandlerFunction();
+    if (fn === 'runHealthCheck' || fn === 'runHealthCheckWithRemoteControl') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+
+  ScriptApp.newTrigger('runHealthCheckWithRemoteControl')
+    .timeBased()
+    .everyDays(1)
+    .atHour(7)
+    .nearMinute(30)
+    .create();
+
+  Logger.log('Remote control trigger created: daily at ~7:30 AM');
+  Logger.log('The health check will now respect pause state, check toggles, and threshold overrides.');
 }
