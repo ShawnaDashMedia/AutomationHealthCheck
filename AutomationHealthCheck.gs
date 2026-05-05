@@ -133,26 +133,26 @@ const CONFIG = {
       spreadsheetId: '1ZpktbBP9StXEHNH43jVKJ_akX7Xkjey6P4T0s8THz4U',
       sheetName: 'DATA DUMP',
       expectedColumns: {
-        // Core columns used by multiple scripts (hardcoded numeric indexes)
-        'A': 'Index',                     // data[i][0]
-        'B': 'Status',                    // data[i][1] — checkForQuestionMark, Rejection Discrepancy
-        'C': 'Company',                   // data[i][2] — Rejection Discrepancy
-        'D': 'Proof Name',               // data[i][3] — sendDuplicateData, sendFailedProof, checkShortLeadTime
-        'N': 'Owner',                     // data[i][13] — checkForQuestionMark, sendDuplicateData, sendFailedProof
-        'O': 'Proof ID',                 // data[i][14] — sendDuplicateDataReport
-        'AF': 'SMM',                      // data[i][31] — sendDuplicateDataReport
-        'AK': 'Rejection Count',          // data[i][36] — Rejection Discrepancy Alert fallback
-        'AT': 'Ziflow URL',              // data[i][45] — sendDuplicateData, sendFailedProof
-        'AU': 'Ziflow ID',               // data[i][46] — sendDuplicateData, checkShortLeadTime
-        'AW': 'Lead Time',               // data[i][48] — checkShortLeadTimeSpecialRequests
-        'AZ': 'Revision Status',          // data[i][51] — Rejection Discrepancy fallback
-        'BB': 'Failed',                   // data[i][53] — sendFailedProofEmail
-        'BJ': 'Workflow',                // data[i][61] — checkForQuestionMark
-        'BK': 'Created Date',            // data[i][62] — checkForQuestionMark, sendDuplicateData, checkShortLeadTime
-        'BQ': 'Special Request Flag',    // data[i][68] — checkShortLeadTimeSpecialRequests
-        'BS': 'Request Type',            // data[i][70] — checkShortLeadTimeSpecialRequests
-        'CC': 'Fee Tier',                // data[i][80] — checkShortLeadTimeSpecialRequests
-        'FI': 'Extended Field'            // data[i][164] — checkShortLeadTimeSpecialRequests (165 cols wide!)
+        // Synced 2026-05-05 to current live state. Update whenever Shawna intentionally reshapes columns.
+        'A': 'placeholder',
+        'B': 'Delivered or Not',
+        'C': 'Proof Status',
+        'D': 'Client',
+        'N': 'Date Created',
+        'O': 'Time Created',
+        'AF': 'Shoot ID',
+        'AK': 'Rejection Discrepancy',
+        'AT': 'Internal ID',
+        'AU': 'Proof Name',
+        'AW': 'First Version Created Date',
+        'AZ': 'Folder',
+        'BB': 'Status',
+        'BJ': 'Stages',
+        'BK': 'Public URL',
+        'BQ': 'Special Request Proof',
+        'BS': 'Your Email',
+        'CC': 'Social Media Posting Date',
+        'FI': 'Video Request Description'
       }
     },
 
@@ -172,8 +172,8 @@ const CONFIG = {
         'AO': 'Post Type',
         'AP': 'Content Type',
         'AQ': 'Profile',
-        'DC': 'Tags',
-        'DD': 'Source'
+        'DC': 'Poll Votes',
+        'DD': 'Tags'
       }
     },
 
@@ -185,24 +185,25 @@ const CONFIG = {
       expectedColumns: {
         'A': 'Date',
         'B': 'Post ID',
-        'BR': 'Tags'
+        'BR': 'Poll Votes'
       }
     },
 
     // === WAG - Filming Summary Database ===
-    // Used by: WAG Assignment Alert (hardcoded), Footage-Management-Form (hardcoded col numbers)
+    // Row 1-2 are UI/instruction text. Real data headers are on row 3, data starts row 4.
     wagFilmingSummary: {
       spreadsheetId: '1JkrY9OvWGd_7299LXueCPu25GZKdpwSsMQCD1aDwoHU',
       sheetName: 'Filming Summary Database',
+      headerRow: 3,
       expectedColumns: {
-        'A': 'Client',                    // CLIENT_COL=0
-        'AD': 'Footage ID',              // Column 30 — Footage-Management-Form
-        'AE': 'Assignment Count',         // FOOTAGE_COL=29 (WAG Assignment Alert)
-        'AK': 'Exhausted/Retired',        // Column 37 — Footage-Management-Form
-        'AW': 'Editor Notes',             // Column 49 — Footage-Management-Form
-        'AX': 'Note Date',               // ASSIGNMENT_COUNT_COL=50 area
-        'AY': 'Alert Flag',              // ALERT_COL=51 (WAG Assignment Alert)
-        'AZ': 'Alert Status'              // ALERT_COL=51 extended
+        'A': 'Client',
+        'AD': 'Footage ID (Edited clip format is: CLIENT NAME - FOOTAGE ID - CLIP #)',
+        'AG': '# of times Assigned',
+        'AK': 'Exhausted/Retired Footage',
+        'AW': 'Editor Notes',
+        'AX': 'Date Note Submitted',
+        'AY': 'Assigned from today forward',
+        'AZ': 'Alert! Scheduled but no footage left!'
       }
     },
 
@@ -245,17 +246,19 @@ const CONFIG = {
     },
 
     // === SMM Payment Calculator ===
-    // Uses columns 2,3,4,11 and Z:AA for payroll
+    // Canonical tab is "*NEW AND READY* SMM Payment Calculator" (per Shawna).
+    // Row 1 contains UI/instruction text rather than clean column headers, so we
+    // only verify the columns the payroll logic depends on still exist (existence-only check).
     smmPaymentCalc: {
       spreadsheetId: '1P3K9hKUiGO3c_5H1k79lwCQeFy0ifXtyxnsWaeui9Yw',
-      sheetName: 'Sheet1',
+      sheetName: '*NEW AND READY* SMM Payment Calculator',
       expectedColumns: {
-        'B': null,  // Column 2
-        'C': null,  // Column 3
-        'D': null,  // Column 4
-        'K': null,  // Column 11
-        'Z': null,  // Payroll data
-        'AA': null  // Payroll data
+        'B': null,
+        'C': null,
+        'D': null,
+        'K': null,
+        'Z': null,
+        'AA': null
       }
     }
   },
@@ -564,7 +567,8 @@ function checkColumnLayouts_(results) {
       }
 
       const lastCol = sheet.getLastColumn();
-      const headers = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+      const headerRow = config.headerRow || 1;
+      const headers = lastCol > 0 ? sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0] : [];
       const mismatches = [];
       let checkedCount = 0;
 
