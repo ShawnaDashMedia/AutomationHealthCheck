@@ -97,21 +97,13 @@ const CONFIG = {
   },
 
   // ---- CSV / Drive folder pipeline checks ----
+  // CSV pipeline checks. The Mac-watcher → SheetGo → sheet path was retired
+  // when the LIVE Data Dump tabs cut over to BigQuery-driven (Ziflow 2026-06-22,
+  // Sprout 2026-06-24). Both sproutCSV and ziflowCSV entries removed at that
+  // point — the Mac watchers' last consumer is gone, the alert was firing on
+  // every run because nobody downloads CSVs anymore. SMM Reports Folder check
+  // remains because Tag Reports are produced independently of the BQ migration.
   csvPipeline: {
-    sproutCSV: {
-      folderName: 'SheetGo - SPROUT CSV',
-      checkName: 'Sprout CSV Pipeline (Mac Watcher → Drive)',
-      maxStaleHours: 36,     // Should arrive every weekday
-      filePrefix: 'Post Performance',
-      description: 'Mac watcher copies Sprout CSVs here for SheetGo pickup'
-    },
-    ziflowCSV: {
-      folderName: 'SheetGo - ZIFLOW CSV',
-      checkName: 'Ziflow CSV Pipeline (Mac Watcher → Drive)',
-      maxStaleHours: 8,      // Ziflow exports 4x/day (7am,10am,1pm,4pm)
-      filePrefix: 'export-proofs',
-      description: 'Mac watcher copies Ziflow CSVs here for SheetGo pickup'
-    },
     smmReportsFolder: {
       folderName: 'SMM Reports',
       checkName: 'SMM Reports Folder (Tag Reports)',
@@ -156,38 +148,13 @@ const CONFIG = {
       }
     },
 
-    // === Sprout Analytics MASTER - Data Dump ===
-    // Used by: Sprout-Master scripts (tag checking, posting status)
-    sproutDataDump: {
-      spreadsheetId: '11BOmRd4V-Q-48gL5NfQ-ydpPB4emhsjgLj27TXordTE',
-      sheetName: 'Data Dump',
-      expectedColumns: {
-        'A': 'Company Name',
-        'B': 'WAG SMM',
-        'R': 'Post for Client?',
-        'S': 'Posted in Sprout',
-        'U': 'Missing or Extra Tags',
-        'AL': 'Date',
-        'AN': 'Network',
-        'AO': 'Post Type',
-        'AP': 'Content Type',
-        'AQ': 'Profile',
-        'DC': 'Poll Votes',
-        'DD': 'Tags'
-      }
-    },
-
-    // === Sprout Analytics MASTER - Sprout CSV data ===
-    // SheetGo-fed tab; column layout must match for formulas
-    sproutCSVData: {
-      spreadsheetId: '11BOmRd4V-Q-48gL5NfQ-ydpPB4emhsjgLj27TXordTE',
-      sheetName: 'Sprout CSV data',
-      expectedColumns: {
-        'A': 'Date',
-        'B': 'Post ID',
-        'BR': 'Poll Votes'
-      }
-    },
+    // sproutDataDump + sproutCSVData column checks REMOVED 2026-06-24 with the
+    // Sprout LIVE Data Dump cutover. The Data Dump tab is now BQ-driven (writes
+    // hourly from Marts.sprout_data_dump via sprout-data-dump-sync Cloud Run);
+    // column positions are now controlled by the SQL view and any drift is
+    // caught at BQ schema level by schema-drift-report. The Sprout CSV data
+    // tab is no longer being refreshed (SheetGo workflow disabled 2026-06-24
+    // 02:30 ET), so its column layout is frozen and meaningless to monitor.
 
     // === WAG - Filming Summary Database ===
     // Row 1-2 are UI/instruction text. Real data headers are on row 3, data starts row 4.
@@ -263,27 +230,14 @@ const CONFIG = {
     }
   },
 
-  // ---- Mac watcher freshness (inferred from Drive file dates) ----
-  macWatchers: {
-    ziflowExport: {
-      folderName: 'SheetGo - ZIFLOW CSV',
-      filePrefix: 'export-proofs',
-      expectedFrequencyHours: 8,     // 4x/day → new file roughly every 3-4 hrs on weekdays
-      warningHours: 10,
-      criticalHours: 24,
-      schedule: '7:00 AM, 10:00 AM, 1:00 PM, 4:00 PM',
-      description: 'ziflow-export-proofs.sh → export-proofs-watcher.sh → Drive'
-    },
-    sproutExport: {
-      folderName: 'SheetGo - SPROUT CSV',
-      filePrefix: 'Post Performance',
-      expectedFrequencyHours: 24,    // 1x/day on weekdays
-      warningHours: 36,
-      criticalHours: 72,
-      schedule: 'Once per weekday (manual Sprout download → watcher)',
-      description: 'sprout-post-performance-watcher.sh → Drive'
-    }
-  },
+  // Mac watcher health checks REMOVED 2026-06-24. Both watchers
+  // (ziflow-export-proofs.sh / export-proofs-watcher.sh and
+  // sprout-post-performance-watcher.sh) fed the SheetGo CSV ingestion path
+  // that's been retired by the Cloud Run data-dump-sync services (Ziflow
+  // 2026-06-22, Sprout 2026-06-24). Their last consumer is gone. The watchers
+  // themselves can be unloaded from launchd at any time; once they are, this
+  // check would log a 'folder not found' error, so it's cleaner to drop now.
+  macWatchers: {},
 
   // ---- Cross-spreadsheet data flows ----
   dataFlows: [
@@ -307,16 +261,10 @@ const CONFIG = {
       maxLagHours: 48,
       mechanism: 'SheetGo sync'
     },
-    {
-      name: 'Sprout CSV → Sprout Master (SheetGo)',
-      sourceId: null,  // Drive folder, not a spreadsheet
-      sourceName: 'SheetGo - SPROUT CSV folder',
-      destId: '11BOmRd4V-Q-48gL5NfQ-ydpPB4emhsjgLj27TXordTE',
-      destName: 'Sprout Analytics MASTER',
-      destSheet: 'Sprout CSV data',
-      maxLagHours: 48,
-      mechanism: 'SheetGo sync from Drive CSV'
-    },
+    // 'Sprout CSV → Sprout Master (SheetGo)' data-flow check REMOVED 2026-06-24.
+    // The SheetGo workflow that ingested Sprout CSVs into the 'Sprout CSV data'
+    // tab was disabled by Shawna following the sprout-data-dump-sync cutover.
+    // The destination tab is no longer being refreshed by anything.
     {
       name: 'VER → Editor Assignment History',
       sourceId: '19Ugu051TrC7G-CxmG_LFk07buqWVqmabDrEFcd9eOkM',
@@ -362,13 +310,10 @@ const CONFIG = {
       minExpectedRows: 50,
       description: 'SheetGo from Master Ziflow Verified List'
     },
-    {
-      name: 'Sprout CSV data',
-      spreadsheetId: '11BOmRd4V-Q-48gL5NfQ-ydpPB4emhsjgLj27TXordTE',
-      sheetName: 'Sprout CSV data',
-      minExpectedRows: 100,
-      description: 'SheetGo from Sprout CSV files in Drive'
-    },
+    // 'Sprout CSV data' row-count check REMOVED 2026-06-24. The SheetGo
+    // workflow that populated this tab was disabled; tab is no longer
+    // refreshed. Sprout post data now flows BQ-direct via Marts.posts +
+    // Marts.sprout_data_dump → LIVE Data Dump tab.
     {
       name: 'Sprout ZIFLOW- Verified List',
       spreadsheetId: '11BOmRd4V-Q-48gL5NfQ-ydpPB4emhsjgLj27TXordTE',
