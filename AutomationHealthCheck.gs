@@ -73,13 +73,10 @@ const CONFIG = {
       maxStaleHours: 168,
       description: 'Search UI — button-driven, no triggers'
     },
-    smmPayment: {
-      id: '1P3K9hKUiGO3c_5H1k79lwCQeFy0ifXtyxnsWaeui9Yw',
-      name: 'SMM Payment Calculator',
-      sheets: [],
-      maxStaleHours: 168,
-      description: 'Payroll periods on 9th-15th and 24th-EOM'
-    },
+    // smmPayment freshness check REMOVED 2026-06-24. Per Shawna, the SMM
+    // Payment Calculator spreadsheet is no longer in use; payroll moved to
+    // a different system. The 638h-stale alert was firing because nothing
+    // updates the sheet anymore — and nothing should.
     twoRevisionsReport: {
       id: '1iHAw9-EYbuA1XrtQd5GcM6e2nx6G1Essypg9Ph1CbvI',
       name: '2+ Revisions Report',
@@ -212,22 +209,10 @@ const CONFIG = {
       }
     },
 
-    // === SMM Payment Calculator ===
-    // Canonical tab is "*NEW AND READY* SMM Payment Calculator" (per Shawna).
-    // Row 1 contains UI/instruction text rather than clean column headers, so we
-    // only verify the columns the payroll logic depends on still exist (existence-only check).
-    smmPaymentCalc: {
-      spreadsheetId: '1P3K9hKUiGO3c_5H1k79lwCQeFy0ifXtyxnsWaeui9Yw',
-      sheetName: '*NEW AND READY* SMM Payment Calculator',
-      expectedColumns: {
-        'B': null,
-        'C': null,
-        'D': null,
-        'K': null,
-        'Z': null,
-        'AA': null
-      }
-    }
+    // smmPaymentCalc column check REMOVED 2026-06-24. Per Shawna, the SMM
+    // Payment Calculator spreadsheet is retired; payroll runs through a
+    // different system now. Nothing reads from this sheet, no monitoring
+    // needed.
   },
 
   // Mac watcher health checks REMOVED 2026-06-24. Both watchers
