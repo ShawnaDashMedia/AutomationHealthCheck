@@ -237,14 +237,17 @@ const CONFIG = {
       mechanism: 'SheetGo sync'
     },
     {
-      name: 'Master Ziflow → Rejection Rates Verified (SheetGo)',
+      name: 'Rejection Rates Verified list (BQ-direct)',
       sourceId: '1ZpktbBP9StXEHNH43jVKJ_akX7Xkjey6P4T0s8THz4U',
       sourceName: 'Master Ziflow DATA DUMP',
       destId: '1DfIpkuj_8EveRz66nMYTm78wFYEUpk2BuxzSSgWsV3E',
       destName: 'Rejection Rates',
       destSheet: 'Sheetgo_Verified list',
       maxLagHours: 48,
-      mechanism: 'SheetGo sync'
+      // Repointed 2026-07-15: Shawna disabled the SheetGo verified-list workflow;
+      // bq-to-verified-list now writes this tab directly (hourly 7am-6pm ET). The
+      // tab name is still 'Sheetgo_Verified list' (legacy) but the source is BQ.
+      mechanism: 'BQ-direct (bq-to-verified-list)'
     },
     // 'Sprout CSV → Sprout Master (SheetGo)' data-flow check REMOVED 2026-06-24.
     // The SheetGo workflow that ingested Sprout CSVs into the 'Sprout CSV data'
@@ -289,22 +292,22 @@ const CONFIG = {
       description: 'SheetGo from Master Ziflow DATA DUMP'
     },
     {
-      name: 'Rejection Rates — Sheetgo_Verified list',
+      name: 'Rejection Rates — Verified list (BQ-direct)',
       spreadsheetId: '1DfIpkuj_8EveRz66nMYTm78wFYEUpk2BuxzSSgWsV3E',
       sheetName: 'Sheetgo_Verified list',
       minExpectedRows: 50,
-      description: 'SheetGo from Master Ziflow Verified List'
+      description: 'BQ-direct: bq-to-verified-list writes this tab hourly (7am-6pm ET). SheetGo verified-list workflow disabled 2026-07-15.'
     },
     // 'Sprout CSV data' row-count check REMOVED 2026-06-24. The SheetGo
     // workflow that populated this tab was disabled; tab is no longer
     // refreshed. Sprout post data now flows BQ-direct via Marts.posts +
     // Marts.sprout_data_dump → LIVE Data Dump tab.
     {
-      name: 'Sprout ZIFLOW- Verified List',
+      name: 'Sprout Master — Verified list (BQ-direct)',
       spreadsheetId: '11BOmRd4V-Q-48gL5NfQ-ydpPB4emhsjgLj27TXordTE',
       sheetName: 'ZIFLOW- Verified List',
       minExpectedRows: 50,
-      description: 'SheetGo/IMPORTRANGE from Master Ziflow Verified List'
+      description: 'BQ-direct: bq-to-verified-list writes this tab hourly (7am-6pm ET). SheetGo/IMPORTRANGE verified-list workflow disabled 2026-07-15.'
     }
   ],
 
