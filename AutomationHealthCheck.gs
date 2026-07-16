@@ -236,19 +236,10 @@ const CONFIG = {
       maxLagHours: 48,
       mechanism: 'SheetGo sync'
     },
-    {
-      name: 'Rejection Rates Verified list (BQ-direct)',
-      sourceId: '1ZpktbBP9StXEHNH43jVKJ_akX7Xkjey6P4T0s8THz4U',
-      sourceName: 'Master Ziflow DATA DUMP',
-      destId: '1DfIpkuj_8EveRz66nMYTm78wFYEUpk2BuxzSSgWsV3E',
-      destName: 'Rejection Rates',
-      destSheet: 'Sheetgo_Verified list',
-      maxLagHours: 48,
-      // Repointed 2026-07-15: Shawna disabled the SheetGo verified-list workflow;
-      // bq-to-verified-list now writes this tab directly (hourly 7am-6pm ET). The
-      // tab name is still 'Sheetgo_Verified list' (legacy) but the source is BQ.
-      mechanism: 'BQ-direct (bq-to-verified-list)'
-    },
+    // Verified-list flow check MOVED 2026-07-15 to CONFIG.verifiedListTabs /
+    // checkVerifiedListTabs_ — all 5 BQ-direct destination tabs are now checked
+    // there for BOTH data (row count) and freshness (the AE2 "Last Successful Run"
+    // stamp bq-to-verified-list writes), instead of only Rejection Rates here.
     // 'Sprout CSV → Sprout Master (SheetGo)' data-flow check REMOVED 2026-06-24.
     // The SheetGo workflow that ingested Sprout CSVs into the 'Sprout CSV data'
     // tab was disabled by Shawna following the sprout-data-dump-sync cutover.
@@ -291,25 +282,30 @@ const CONFIG = {
       minExpectedRows: 100,
       description: 'SheetGo from Master Ziflow DATA DUMP'
     },
-    {
-      name: 'Rejection Rates — Verified list (BQ-direct)',
-      spreadsheetId: '1DfIpkuj_8EveRz66nMYTm78wFYEUpk2BuxzSSgWsV3E',
-      sheetName: 'Sheetgo_Verified list',
-      minExpectedRows: 50,
-      description: 'BQ-direct: bq-to-verified-list writes this tab hourly (7am-6pm ET). SheetGo verified-list workflow disabled 2026-07-15.'
-    },
+    // Verified-list row-count checks MOVED 2026-07-15 to CONFIG.verifiedListTabs /
+    // checkVerifiedListTabs_ (all 5 tabs, data + freshness).
     // 'Sprout CSV data' row-count check REMOVED 2026-06-24. The SheetGo
     // workflow that populated this tab was disabled; tab is no longer
     // refreshed. Sprout post data now flows BQ-direct via Marts.posts +
     // Marts.sprout_data_dump → LIVE Data Dump tab.
-    {
-      name: 'Sprout Master — Verified list (BQ-direct)',
-      spreadsheetId: '11BOmRd4V-Q-48gL5NfQ-ydpPB4emhsjgLj27TXordTE',
-      sheetName: 'ZIFLOW- Verified List',
-      minExpectedRows: 50,
-      description: 'BQ-direct: bq-to-verified-list writes this tab hourly (7am-6pm ET). SheetGo/IMPORTRANGE verified-list workflow disabled 2026-07-15.'
-    }
+    // (Sprout Master verified-list check also moved to CONFIG.verifiedListTabs 2026-07-15.)
   ],
+
+  // ---- Verified List tabs: BQ-direct write health (all 5 destinations) ----
+  // bq-to-verified-list rewrites the Verified list into these 5 tabs hourly
+  // (7am-6pm ET) from Notion. Check EACH for: (a) data present (row count) and
+  // (b) freshness — the 'Last Successful Run' timestamp the service stamps into
+  // cell AE2. maxStaleHours=26 allows the normal overnight gap (last run ~6:45pm
+  // -> next ~7:45am ≈ 13h) plus slack; a >26h-old stamp means the BQ write stalled.
+  verifiedListTabs: [
+    { name: 'Master Ziflow',   spreadsheetId: '1ZpktbBP9StXEHNH43jVKJ_akX7Xkjey6P4T0s8THz4U', sheetName: 'Verified list' },
+    { name: 'WAG',             spreadsheetId: '1JkrY9OvWGd_7299LXueCPu25GZKdpwSsMQCD1aDwoHU', sheetName: 'Sheetgo_Verified list' },
+    { name: 'VER',             spreadsheetId: '19Ugu051TrC7G-CxmG_LFk07buqWVqmabDrEFcd9eOkM', sheetName: 'Sheetgo_Verified list' },
+    { name: 'Rejection Rates', spreadsheetId: '1DfIpkuj_8EveRz66nMYTm78wFYEUpk2BuxzSSgWsV3E', sheetName: 'Sheetgo_Verified list' },
+    { name: 'Sprout Master',   spreadsheetId: '11BOmRd4V-Q-48gL5NfQ-ydpPB4emhsjgLj27TXordTE', sheetName: 'ZIFLOW- Verified List' }
+  ],
+  verifiedListMinRows: 50,
+  verifiedListMaxStaleHours: 26,
 
   // ---- Formula health spot-checks ----
   formulaChecks: [
@@ -407,6 +403,9 @@ function runHealthCheck() {
 
   // 5. SheetGo sync health (row counts)
   checkSheetGoSyncs_(results);
+
+  // Verified List — BQ-direct write health (all 5 tabs: data + AE2 freshness)
+  checkVerifiedListTabs_(results);
 
   // 6. Formula health (value validation + error scanning)
   checkFormulaHealth_(results);
@@ -794,6 +793,75 @@ function checkSheetGoSyncs_(results) {
 /**
  * 6. FORMULA HEALTH — Value validation + error scanning across key sheets
  */
+/**
+ * Verified List — BQ-direct write health for ALL 5 destination tabs.
+ * bq-to-verified-list rewrites each tab hourly (7am-6pm ET) from Notion. For each
+ * tab we check both:
+ *   (a) DATA present  — row count >= verifiedListMinRows (empty/short => write failed);
+ *   (b) FRESHNESS     — the 'Last Successful Run' timestamp the service stamps into
+ *       cell AE2. Older than verifiedListMaxStaleHours => the hourly write stalled.
+ * This is the outside-in safety net for all 5 tabs (bq-to-verified-list also alarms
+ * itself from the inside, so the two nets are independent).
+ */
+function checkVerifiedListTabs_(results) {
+  const now = new Date();
+  for (const t of CONFIG.verifiedListTabs) {
+    try {
+      const ss = SpreadsheetApp.openById(t.spreadsheetId);
+      const sheet = ss.getSheetByName(t.sheetName);
+      if (!sheet) {
+        results.checks.push({
+          category: 'Verified List',
+          name: t.name,
+          status: 'critical',
+          message: 'Tab "' + t.sheetName + '" not found — the BQ→sheet write target is missing or was renamed'
+        });
+        continue;
+      }
+
+      // (a) data present
+      const lastRow = sheet.getLastRow();
+
+      // (b) freshness — AE2 'Last Successful Run' stamp (a real datetime via USER_ENTERED)
+      const ae = sheet.getRange('AE2').getValue();
+      let ageHours = null;
+      if (Object.prototype.toString.call(ae) === '[object Date]') {
+        ageHours = (now.getTime() - ae.getTime()) / 3600000;
+      } else if (ae) {
+        const parsed = new Date(String(ae).replace(' ', 'T'));
+        if (!isNaN(parsed.getTime())) ageHours = (now.getTime() - parsed.getTime()) / 3600000;
+      }
+
+      const parts = [];
+      let status = 'healthy';
+      if (lastRow < 10) {
+        status = 'critical';
+        parts.push('only ' + lastRow + ' rows — BQ write likely failed');
+      } else if (lastRow < CONFIG.verifiedListMinRows) {
+        status = 'warning';
+        parts.push(lastRow + ' rows (expected at least ' + CONFIG.verifiedListMinRows + ')');
+      }
+
+      if (ageHours === null) {
+        if (status === 'healthy') status = 'warning';
+        parts.push('no "Last Successful Run" stamp in AE2 — cannot confirm the BQ write is landing');
+      } else if (ageHours > CONFIG.verifiedListMaxStaleHours) {
+        status = 'critical';
+        parts.push('last BQ write ' + Math.round(ageHours) + 'h ago (stale; expected under ' +
+                   CONFIG.verifiedListMaxStaleHours + 'h) — the hourly write may have stopped');
+      }
+
+      if (status === 'healthy') {
+        parts.push(lastRow + ' rows, last BQ write ' + Math.round(ageHours) + 'h ago');
+      }
+      results.checks.push({ category: 'Verified List', name: t.name, status: status, message: parts.join('; ') });
+    } catch (e) {
+      results.checks.push({ category: 'Verified List', name: t.name, status: 'critical', message: 'Error: ' + e.message });
+    }
+  }
+}
+
+
 function checkFormulaHealth_(results) {
   for (const check of CONFIG.formulaChecks) {
     try {
@@ -1258,6 +1326,7 @@ function sendHealthCheckEmail_(results) {
     Object.keys(CONFIG.columnChecks).length + ' column layouts, ' +
     Object.keys(CONFIG.csvPipeline).length + ' CSV pipelines, ' +
     CONFIG.sheetGoSyncs.length + ' SheetGo syncs, ' +
+    CONFIG.verifiedListTabs.length + ' verified-list tabs, ' +
     CONFIG.formulaChecks.length + ' formula checks, ' +
     Object.keys(CONFIG.macWatchers).length + ' Mac watchers, ' +
     CONFIG.dataFlows.length + ' data flows<br>' +
@@ -1317,6 +1386,9 @@ function testHealthCheck() {
   checkCSVPipelines_(results);
   checkMacWatcherHealth_(results);
   checkSheetGoSyncs_(results);
+
+  // Verified List — BQ-direct write health (all 5 tabs: data + AE2 freshness)
+  checkVerifiedListTabs_(results);
   checkFormulaHealth_(results);
   checkCrossSpreadsheetFlows_(results);
   checkFilmingScheduleLibrary_(results);
@@ -1353,6 +1425,9 @@ function dryRunHealthCheck() {
   checkCSVPipelines_(results);
   checkMacWatcherHealth_(results);
   checkSheetGoSyncs_(results);
+
+  // Verified List — BQ-direct write health (all 5 tabs: data + AE2 freshness)
+  checkVerifiedListTabs_(results);
   checkFormulaHealth_(results);
   checkCrossSpreadsheetFlows_(results);
   checkFilmingScheduleLibrary_(results);
