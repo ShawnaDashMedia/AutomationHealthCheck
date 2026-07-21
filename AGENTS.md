@@ -38,7 +38,7 @@ The 14 discipline items in that file apply here TOO. This shorter file exists to
 
 ## Reference to canonical discipline
 
-The 13 items you also must follow (full text in the canonical file linked above):
+The 14 items you also must follow (full text in the canonical file linked above):
 
 1. Git sync discipline (commit + git push + clasp push, all in the same flow)
 2. CHANGELOG discipline (invoke log-pipeline-change skill for meaningful changes)
