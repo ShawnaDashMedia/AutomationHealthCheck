@@ -6,7 +6,7 @@ Shared conventions every AI agent working in this Apps Script repo must follow.
 - [`dash-bigquery-pipelines/AGENTS.md`](https://github.com/ShawnaDashMedia/dash-bigquery-pipelines/blob/main/AGENTS.md) — canonical discipline items
 - [`dash-automation/AGENTS.md`](https://github.com/ShawnaDashMedia/dash-automation/blob/main/AGENTS.md) — companion for the cloud pipelines side
 
-The 14 discipline items in that file apply here TOO. This shorter file exists to cover Apps-Script-specific nuances that don't apply to the Python cloud services.
+The 15 discipline items in that file apply here TOO. This shorter file exists to cover Apps-Script-specific nuances that don't apply to the Python cloud services.
 
 ---
 
@@ -38,7 +38,7 @@ The 14 discipline items in that file apply here TOO. This shorter file exists to
 
 ## Reference to canonical discipline
 
-The 14 items you also must follow (full text in the canonical file linked above):
+The 15 items you also must follow (full text in the canonical file linked above):
 
 1. Git sync discipline (commit + git push + clasp push, all in the same flow)
 2. CHANGELOG discipline (invoke log-pipeline-change skill for meaningful changes)
@@ -54,12 +54,13 @@ The 14 items you also must follow (full text in the canonical file linked above)
 12. Independence of verifier (high-stakes: author + verifier + adversarial reviewer; low-stakes: single verifier)
 13. Cross-check formal proposals against your own prior positions
 14. Sweep-completeness discipline: nothing is complete until every source is directly checked (Notion + repos + artifacts, not just top search hits)
+15. Rename impact analysis before any name change (blast-radius report + Shawna decides, never rename first and ask later)
 
 ---
 
 ## How to update this file
 
-Apps-Script-specific rules (A1-A5 above) can be updated in this repo per the standard flow (propose in DB: Agent Messages, get concurrence, commit). The 14 canonical items must NOT be duplicated or forked here — always link to the canonical source in dash-bigquery-pipelines.
+Apps-Script-specific rules (A1-A5 above) can be updated in this repo per the standard flow (propose in DB: Agent Messages, get concurrence, commit). The 15 canonical items must NOT be duplicated or forked here — always link to the canonical source in dash-bigquery-pipelines.
 
 If a canonical rule needs revision, that change lands in `dash-bigquery-pipelines/AGENTS.md` first, then propagates.
 
