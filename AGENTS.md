@@ -12,7 +12,7 @@ The 13 discipline items in that file apply here TOO. This shorter file exists to
 
 ## What this repo is
 
-[FILL IN PER REPO — one-paragraph description of what this Apps Script project does, which spreadsheet(s) it's bound to (if any), and which people / services depend on it. Example: "Bound Apps Script for VER (Ver Editor Assignment Planner). Runs the WAG plan and updates editor assignments per Randy's rules. Depends on: filming-summaries-sync (upstream), editor-guides-sync (upstream)."]
+[FILL IN PER REPO — one-paragraph description of what this Apps Script project does, which spreadsheet(s) it's bound to (if any), and which people / services depend on it. Example: "Bound Apps Script for VER (Videographer and Editor Resources). Runs the WAG plan and updates editor assignments per Randy's rules. Depends on: filming-summaries-sync (upstream), editor-guides-sync (upstream)."]
 
 **Bound spreadsheet ID (if applicable):** [FILL IN]
 

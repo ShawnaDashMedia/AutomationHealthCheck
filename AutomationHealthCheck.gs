@@ -47,7 +47,7 @@ const CONFIG = {
     },
     ver: {
       id: '19Ugu051TrC7G-CxmG_LFk07buqWVqmabDrEFcd9eOkM',
-      name: 'VER: Videographer/Editor Resources',
+      name: 'VER: Videographer and Editor Resources',
       sheets: ['POST SHOOT - Filming Summary Database', 'Client Guidelines & Rules', 'ZIFLOW - DATA DUMP'],
       maxStaleHours: 72,
       description: 'Editor assignments, Shelby note notifications'
