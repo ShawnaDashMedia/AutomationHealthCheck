@@ -6,7 +6,7 @@ Shared conventions every AI agent working in this Apps Script repo must follow.
 - [`dash-bigquery-pipelines/AGENTS.md`](https://github.com/ShawnaDashMedia/dash-bigquery-pipelines/blob/main/AGENTS.md) — canonical discipline items
 - [`dash-automation/AGENTS.md`](https://github.com/ShawnaDashMedia/dash-automation/blob/main/AGENTS.md) — companion for the cloud pipelines side
 
-The 16 discipline items in that file apply here TOO. This shorter file exists to cover Apps-Script-specific nuances that don't apply to the Python cloud services.
+The shared discipline items in that file apply here TOO. This shorter file exists to cover Apps-Script-specific nuances that don't apply to the Python cloud services.
 
 ---
 
@@ -20,7 +20,7 @@ The 16 discipline items in that file apply here TOO. This shorter file exists to
 
 ---
 
-## Apps-Script-specific rules (in addition to the 12 canonical items)
+## Apps-Script-specific rules (in addition to the shared canonical discipline)
 
 **A1. Verify `.clasp.json` scriptId before every `clasp push`.** Pushing to the wrong scriptId overwrites the wrong project silently. This is the Apps Script equivalent of "wrong repo" — same class of error as `feedback_verify_blast_radius_by_grep.md`. Before pushing, run `cat .clasp.json | grep scriptId` and confirm the Apps Script project it references is the one you meant to deploy to.
 
@@ -36,35 +36,27 @@ The 16 discipline items in that file apply here TOO. This shorter file exists to
 
 ---
 
-## Reference to canonical discipline
+## Shared discipline items — see canonical
 
-The 16 items you also must follow (full text in the canonical file linked above):
+<!-- Do NOT list or count the shared discipline items here. They live ONLY in
+canonical (linked below). Re-adding them reintroduces the drift this structure
+removed. Per unanimous 3-agent vote 2026-07-21 (orchestrator, stranger-agent,
+The Auditor) implementing "Option A: bare pointers" per Shawna directive. -->
 
-1. Git sync discipline (commit + git push + clasp push, all in the same flow)
-2. CHANGELOG discipline (invoke log-pipeline-change skill for meaningful changes)
-3. Read actual code, not prose
-4. Sample-validate before asserting
-5. Verify blast radius by grep
-6. Sample-validate 5+ RANDOM hits for counter-based findings (+ sampling-disagreement rule + intentionally-retained allowlist)
-7. Sweep-in-progress + sweep-complete protocol during parallel work
-8. Propose-confirm for exposed changes
-9. Cross-repo scope awareness
-10. Never bypass hooks or safety
-11. Ask before inventing
-12. Independence of verifier (high-stakes: author + verifier + adversarial reviewer; low-stakes: single verifier)
-13. Cross-check formal proposals against your own prior positions
-14. Sweep-completeness discipline: nothing is complete until every source is directly checked (Notion + repos + artifacts, not just top search hits)
-15. Rename impact analysis before any name change (blast-radius report + Shawna decides, never rename first and ask later)
-16. Check + acknowledge PR review comments BEFORE merging (Codex + human reviewers = independent verifiers per item #12)
+For the shared discipline items every agent must follow, see the canonical file:
+[`dash-bigquery-pipelines/AGENTS.md`](https://github.com/ShawnaDashMedia/dash-bigquery-pipelines/blob/main/AGENTS.md).
+
+Any change to shared discipline lands in canonical FIRST; this file just links to it.
+The count and content live in exactly one place — that's what "canonical" means.
 
 ---
 
 ## How to update this file
 
-Apps-Script-specific rules (A1-A5 above) can be updated in this repo per the standard flow (propose in DB: Agent Messages, get concurrence, commit). The 16 canonical items must NOT be duplicated or forked here — always link to the canonical source in dash-bigquery-pipelines.
+Apps-Script-specific rules (A1-A5 above) can be updated in this repo per the standard flow (propose in DB: Agent Messages, get concurrence, commit). The shared canonical discipline items must NOT be duplicated or forked here — always link to the canonical source in dash-bigquery-pipelines.
 
 If a canonical rule needs revision, that change lands in `dash-bigquery-pipelines/AGENTS.md` first, then propagates.
 
 ---
 
-Last updated: 2026-07-21 (per-repo sections left blank; fill at first substantive work per orchestrator's answer #3). Owners: all 4 agents + Shawna.
+Last updated: 2026-07-22 (Option A restructure: reference list stripped, pointer to canonical only, per unanimous 3-agent vote 2026-07-21). Owners: all 4 agents + Shawna.
